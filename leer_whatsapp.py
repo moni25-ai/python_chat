@@ -4,6 +4,7 @@ import re
 import gspread
 from google.oauth2.service_account import Credentials
 import zipfile
+import json  # agregado para leer variable de entorno
 
 # ─── CONFIGURACIÓN GENERAL ─────────────────────────
 carpeta_chat = "."   # Ruta base del repositorio
@@ -45,11 +46,10 @@ scopes = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# credenciales.json debe estar en el repositorio raíz
-credenciales = Credentials.from_service_account_file(
-    "./credenciales.json",
-    scopes=scopes
-)
+# Leer credenciales desde variable de entorno
+cred_json = os.environ.get("CREDENCIALES_JSON")
+credenciales_dict = json.loads(cred_json)
+credenciales = Credentials.from_service_account_info(credenciales_dict, scopes=scopes)
 
 cliente = gspread.authorize(credenciales)
 spreadsheet = cliente.open("Beer and wheel tablero de control 2026")
