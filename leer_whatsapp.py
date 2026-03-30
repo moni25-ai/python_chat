@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 import zipfile
 
 # ─── CONFIGURACIÓN GENERAL ─────────────────────────
-carpeta_chat = "C:/Python_Chat"
+carpeta_chat = "."   # Ruta base del repositorio
 
 palabras_clave_hojas = {
     "númerossupervisión": {"hoja": "Laprida", "cols": ["B","C","D"]},
@@ -44,15 +44,18 @@ scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
+
+# credenciales.json debe estar en el repositorio raíz
 credenciales = Credentials.from_service_account_file(
-    "C:/Python_Chat/credenciales.json",
+    "./credenciales.json",
     scopes=scopes
 )
+
 cliente = gspread.authorize(credenciales)
 spreadsheet = cliente.open("Beer and wheel tablero de control 2026")
 
 # ─── PROCESAR ZIPS ─────────────────────────
-carpeta_zip = os.path.join(carpeta_chat, "archivos_zip")
+carpeta_zip = "./archivos_zip"
 procesados = os.path.join(carpeta_zip, "procesados")
 os.makedirs(procesados, exist_ok=True)
 
