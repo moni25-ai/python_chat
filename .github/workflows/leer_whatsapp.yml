@@ -1,0 +1,26 @@
+name: Leer WhatsApp
+
+on:
+  schedule:
+    - cron: '0 0 */5 * *'  # Cada 5 días a la medianoche
+  workflow_dispatch:  # Permite ejecutar manualmente si querés
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Chequear repositorio
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: |
+          pip install gspread google-auth
+
+      - name: Ejecutar leer_whatsapp.py
+        run: python Python_chat/leer_whatsapp.py
