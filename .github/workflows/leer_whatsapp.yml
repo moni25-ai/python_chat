@@ -23,4 +23,4 @@ jobs:
           pip install gspread google-auth
 
       - name: Ejecutar leer_whatsapp.py
-        run: python ./Python_chat/leer_whatsapp.py
+        run: python leer_whatsapp.py
