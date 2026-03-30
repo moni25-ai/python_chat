@@ -1,23 +1,18 @@
 import shutil
 import os
 import re
-import csv
 import gspread
 from google.oauth2.service_account import Credentials
+import zipfile
 
 # ─── CONFIGURACIÓN GENERAL ─────────────────────────
-trabajos = [
-    {"archivo": "C:/Python_Chat/semana_1.txt", "hoja": "Laprida", "cols": ["B","C","D"]},
-    {"archivo": "C:/Python_Chat/semana_arenales1.txt", "hoja": "Arenales", "cols": ["B","C","D"]},
-    {"archivo": "C:/Python_Chat/semana1_barra.txt", "hoja": "Laprida", "cols": ["E","F","G"]}
-]
-
-descargas = "C:/Users/lusam/Downloads"
 carpeta_chat = "C:/Python_Chat"
-fila_inicio = 34
-mes_filtro = 2   # Febrero
-dia_inicio = 1
-dia_fin = 17
+
+palabras_clave_hojas = {
+    "númerossupervisión": {"hoja": "Laprida", "cols": ["B","C","D"]},
+    "arenales": {"hoja": "Arenales", "cols": ["B","C","D"]},
+    "barra": {"hoja": "Laprida", "cols": ["E","F","G"]}
+}
 
 # ─── FUNCIONES ─────────────────────────
 def normalizar_numero(texto):
@@ -44,16 +39,6 @@ def normalizar_fecha(fecha):
         return None
     return f"{dia:02d}-{mes:02d}"
 
-# ─── EXPRESIONES REGULARES ─────────────────────────
-regex_apertura_bloque = re.compile(
-    r'^\d{1,2}/\d{1,2}/\d{4},\s*\d{1,2}:\d{2}\s*-\s*(.+?):\s*(\d{1,2}/\d{1,2})$'
-)
-regex_inicio = re.compile(r'^inicio\b', re.IGNORECASE)
-regex_fact = re.compile(r'\b(facturacion|facturación|fac|fact|factu)\b', re.IGNORECASE)
-regex_montos = re.compile(r'\$\s*\d[\d\.,]*k?|\b\d+(?:[\.,]\d+)?k\b', re.IGNORECASE)
-regex_mp = re.compile(r'\b(m\.?p\.?)\b', re.IGNORECASE)
-regex_efectivo = re.compile(r'\befectivo\b', re.IGNORECASE)
-
 # ─── GOOGLE SHEETS ─────────────────────────
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -66,162 +51,174 @@ credenciales = Credentials.from_service_account_file(
 cliente = gspread.authorize(credenciales)
 spreadsheet = cliente.open("Beer and wheel tablero de control 2026")
 
-# ─── PROCESAR CADA ARCHIVO ─────────────────────────
-for trabajo in trabajos:
+# ─── PROCESAR ZIPS ─────────────────────────
+carpeta_zip = os.path.join(carpeta_chat, "archivos_zip")
+procesados = os.path.join(carpeta_zip, "procesados")
+os.makedirs(procesados, exist_ok=True)
+
+for archivo_zip in os.listdir(carpeta_zip):
+    if not archivo_zip.lower().endswith(".zip"):
+        continue
+    ruta_zip = os.path.join(carpeta_zip, archivo_zip)
+    print(f"📦 Procesando ZIP: {archivo_zip}")
+
+    with zipfile.ZipFile(ruta_zip, 'r') as zip_ref:
+        zip_ref.extractall(carpeta_chat)
+    print(f"✅ Archivos extraídos a {carpeta_chat}")
+
+    shutil.move(ruta_zip, os.path.join(procesados, archivo_zip))
+    print(f"➡️ ZIP movido a procesados")
+
+# ─── DETECTAR TXT ─────────────────────────
+txts = [f for f in os.listdir(carpeta_chat) if f.lower().endswith(".txt")]
+
+for archivo_txt in txts:
+    ruta_txt = os.path.join(carpeta_chat, archivo_txt)
+
+    # Buscar hoja por palabra clave
+    trabajo = None
+    nombre_lower = archivo_txt.lower()
+    for clave, info in palabras_clave_hojas.items():
+        if clave.lower() in nombre_lower:
+            trabajo = {"archivo": ruta_txt, "hoja": info["hoja"], "cols": info["cols"]}
+            break
+
+    if not trabajo:
+        print(f"❌ No se pudo clasificar {archivo_txt}")
+        os.remove(ruta_txt)
+        continue
+
     archivo = trabajo["archivo"]
     nombre_hoja = trabajo["hoja"]
     cols = trabajo["cols"]
 
-    # ─── MOVER ARCHIVO AUTOMÁTICAMENTE ─────────
-    os.makedirs(carpeta_chat, exist_ok=True)
-    if not os.path.exists(archivo):
-        ruta_descarga = os.path.join(descargas, os.path.basename(archivo))
-        if os.path.exists(ruta_descarga):
-            shutil.move(ruta_descarga, archivo)
-            print(f"✅ {os.path.basename(archivo)} movido automáticamente a {carpeta_chat}")
-        else:
-            print(f"❌ No se encontró el archivo {os.path.basename(archivo)} en Descargas")
-            continue
+    print(f"\n➡️ Procesando {archivo_txt} → hoja {nombre_hoja}")
 
-    print(f"\n➡️ Procesando {archivo} → hoja {nombre_hoja} (columnas {cols})")
-
-    # ─── LEER ARCHIVO ─────────────────────────
+    # Leer TXT
     with open(archivo, "r", encoding="utf-8") as f:
         lineas = [l.rstrip() for l in f]
 
-    # ─── DETECTAR BLOQUES ─────────────────────────
+    # Regex
+    regex_apertura_bloque = re.compile(
+        r'^\d{1,2}/\d{1,2}/\d{4},\s*\d{1,2}:\d{2}\s*-\s*(.+?):\s*(\d{1,2}/\d{1,2})$'
+    )
+    regex_inicio = re.compile(r'^inicio\b', re.IGNORECASE)
+    regex_fact = re.compile(r'\b(facturacion|facturación|fac|fact|factu)\b', re.IGNORECASE)
+    regex_montos = re.compile(r'\$\s*\d[\d\.,]*k?|\b\d+(?:[\.,]\d+)?k\b', re.IGNORECASE)
+    regex_mp = re.compile(r'\b(m\.?p\.?)\b', re.IGNORECASE)
+
+    # Detectar bloques
     bloques = []
     bloque_actual = []
     bloque_activo = False
     fact_detectado = False
-    fecha_actual = ""
-    nombre_actual = ""
 
     for i, linea in enumerate(lineas):
-        linea_limpia = linea.strip()
-        m = regex_apertura_bloque.match(linea_limpia)
+        m = regex_apertura_bloque.match(linea)
         if m:
-            nombre_actual = m.group(1)
-            fecha_actual = m.group(2)
+            nombre = m.group(1)
+            fecha = m.group(2)
             inicio_encontrado = False
-            for j in range(1,5):
+            for j in range(1, 5):
                 if i + j >= len(lineas):
                     break
-                linea_test = lineas[i+j].strip()
-                if linea_test == "" or linea_test == "_":
+                t = lineas[i + j].strip()
+                if t == "" or t == "_":
                     continue
-                if regex_inicio.match(linea_test):
+                if regex_inicio.match(t):
                     inicio_encontrado = True
                     break
             if inicio_encontrado:
                 bloque_actual = []
                 bloque_activo = True
                 fact_detectado = False
+                fecha_actual = fecha
+                nombre_actual = nombre
             else:
                 bloque_activo = False
             continue
+
         if bloque_activo:
-            bloque_actual.append(linea_limpia)
-            if regex_fact.search(linea_limpia):
+            bloque_actual.append(linea.strip())
+            if regex_fact.search(linea):
                 fact_detectado = True
             if fact_detectado:
                 bloques.append((fecha_actual, nombre_actual, bloque_actual))
                 bloque_activo = False
 
-    # ─── FILTRAR BLOQUES POR FEBRERO ─────────
-    bloques_filtrados = []
+    # ────────────────────────────────────────────────
+    #   📌 DETECTAR ÚLTIMA FILA CON DATOS
+    # ────────────────────────────────────────────────
+    hoja = spreadsheet.worksheet(nombre_hoja)
+
+    col_mp = hoja.col_values(ord(cols[1]) - 64)
+    col_ef = hoja.col_values(ord(cols[0]) - 64)
+    col_fac = hoja.col_values(ord(cols[2]) - 64)
+
+    ultima_fila = 0
+    for i in range(len(col_mp)):
+        if col_mp[i] or col_ef[i] or col_fac[i]:
+            ultima_fila = i + 1
+
+    print(f"📌 Última fila con datos: {ultima_fila}")
+
+    # Fechas en col A
+    fechas_hoja = hoja.col_values(1)
+    fechas_pendientes = fechas_hoja[ultima_fila:]
+    fechas_normalizadas = [normalizar_fecha(f) for f in fechas_pendientes]
+    fechas_permitidas = set(fechas_normalizadas)
+
+    filas_resultado = {}
+
     for fecha, nombre, bloque in bloques:
         nf = normalizar_fecha(fecha)
-        if nf is None:
+        print(f"\n🟦 Bloque detectado ({nf}) — {nombre}")
+        print("\n".join(bloque))
+
+        if nf not in fechas_permitidas:
+            print("❌ Fecha no coincide con hoja (ignorada)")
             continue
-        dia, mes = map(int, nf.split("-"))
-        if mes == mes_filtro and dia_inicio <= dia <= dia_fin:
-            bloques_filtrados.append((fecha, nombre, bloque))
 
-    bloques_filtrados.sort(key=lambda x: tuple(int(p) for p in normalizar_fecha(x[0]).split("-")))
-    print("Bloques detectados (filtrados por rango):", len(bloques_filtrados))
+        mp_val = None
+        fact_val = None
 
-    # ─── CALCULAR MP, EFECTIVO, FACTURACION ─────────
-    filas = []
-    bloques_sin_coincidencia = []
-    for fecha, nombre, bloque in bloques_filtrados:
-        mp_valor = None
-        fact_valor = None
-        efectivo_existe = any(regex_efectivo.search(l) for l in bloque)
-        for i, linea in enumerate(bloque):
+        for linea in bloque:
             m_monto = regex_montos.search(linea)
             if m_monto:
-                monto_normalizado = normalizar_numero(m_monto.group())
-                bloque[i] = regex_montos.sub(str(monto_normalizado), linea)
+                monto = normalizar_numero(m_monto.group())
                 if regex_mp.search(linea):
-                    mp_valor = monto_normalizado
+                    mp_val = monto
                 if regex_fact.search(linea):
-                    fact_valor = monto_normalizado
-        if mp_valor is not None and fact_valor is not None:
-            efectivo_final = fact_valor - mp_valor
-            if not efectivo_existe:
-                posicion = len(bloque)
-                for i, linea in enumerate(bloque):
-                    if regex_fact.search(linea):
-                        posicion = i
-                        break
-                bloque.insert(posicion, f"Efectivo {efectivo_final}")
-        else:
-            efectivo_final = None
-        filas.append([fecha, mp_valor, efectivo_final, fact_valor])
+                    fact_val = monto
 
-        # mostrar bloque
-        print(f"\n──────── BLOQUE {nombre} ────────")
-        print(f"Fecha: {fecha}")
-        for linea in bloque:
-            print(linea)
-        print(f"→ MP: {mp_valor}, Efectivo: {efectivo_final}, Facturación: {fact_valor}")
+        efectivo_val = None
+        if mp_val is not None and fact_val is not None:
+            efectivo_val = fact_val - mp_val
 
-    # ─── BACKUP CSV ─────────────────────────
-    ruta_csv = f"c:/python_chat/backup_{os.path.basename(archivo).split('.')[0]}.csv"
-    with open(ruta_csv, "w", newline="", encoding="utf-8") as f:
-        escritor = csv.writer(f)
-        escritor.writerow(["fecha", "mp", "efectivo", "facturacion"])
-        for fila in filas:
-            escritor.writerow(fila)
-    print(f"✅ Backup guardado en {ruta_csv}")
+        print(f"💰 MP: {mp_val}  | FACT: {fact_val}  | EFECTIVO: {efectivo_val}")
 
-    # ─── ACTUALIZAR GOOGLE SHEETS ─────────
-    hoja = spreadsheet.worksheet(nombre_hoja)
-    fechas_hoja_raw = hoja.col_values(1)[fila_inicio-1:]
-    fechas_hoja_norm = [normalizar_fecha(f.strip()) for f in fechas_hoja_raw if f.strip()]
+        filas_resultado[nf] = [
+            efectivo_val or "",
+            mp_val or "",
+            fact_val or ""
+        ]
 
-    filas_dict = {normalizar_fecha(f[0]): f for f in filas}
-
+    # ─── Cargar datos ───────────────────────────────
     datos_actualizar = []
-    for f in fechas_hoja_raw:
-        nf = normalizar_fecha(f.strip())
-        if nf in filas_dict:
-            fila = filas_dict[nf]
-            # asignar según columnas de este archivo
-            if cols == ["E","F","G"]:
-                efectivo_valor = fila[2] if fila[2] else ""
-                mp_valor = fila[1] if fila[1] else ""
-                fact_valor = fila[3] if fila[3] else ""
-            else:
-                mp_valor = fila[1] if fila[1] else ""
-                efectivo_valor = fila[2] if fila[2] else ""
-                fact_valor = fila[3] if fila[3] else ""
+    for f in fechas_normalizadas:
+        if f in filas_resultado:
+            datos_actualizar.append(filas_resultado[f])
         else:
-            mp_valor = ""
-            efectivo_valor = ""
-            fact_valor = ""
-            bloques_sin_coincidencia.append(nf)
-        datos_actualizar.append([efectivo_valor, mp_valor, fact_valor])
+            print(f"🔴 No llegó información para {f}")
+            datos_actualizar.append(["", "", ""])
 
-    # construir rango según columnas y fila_inicio
-    rango = f"{cols[0]}{fila_inicio}:{cols[2]}{fila_inicio + len(datos_actualizar) - 1}"
+    inicio = ultima_fila + 1
+    fin = inicio + len(datos_actualizar) - 1
+    rango = f"{cols[0]}{inicio}:{cols[2]}{fin}"
+
     hoja.update(rango, datos_actualizar)
-    print(f"✅ Datos cargados correctamente en hoja {nombre_hoja}")
+    print(f"✅ Datos cargados en hoja {nombre_hoja}")
 
-    if bloques_sin_coincidencia:
-        print("\n⚠️ Bloques sin coincidencia en hoja:")
-        for b in bloques_sin_coincidencia:
-            print(f"\033[91m{b}\033[0m")
-    else:
-        print("\n✅ Todos los bloques encontraron coincidencia con la hoja")
+    # Borrar TXT procesado
+    os.remove(archivo)
+    print(f"🗑 TXT eliminado: {archivo_txt}")
