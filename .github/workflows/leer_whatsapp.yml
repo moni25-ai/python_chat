@@ -8,6 +8,8 @@ on:
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    env:
+      CREDENCIALES_JSON: ${{ secrets.CREDENCIALES_JSON }}  # Aquí usamos el secreto que creaste
 
     steps:
       - name: Chequear repositorio
