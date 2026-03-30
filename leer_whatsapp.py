@@ -4,7 +4,7 @@ import re
 import gspread
 from google.oauth2.service_account import Credentials
 import zipfile
-import json  # agregado para leer variable de entorno
+import json
 
 # ─── CONFIGURACIÓN GENERAL ─────────────────────────
 carpeta_chat = "."   # Ruta base del repositorio
@@ -46,8 +46,11 @@ scopes = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Leer credenciales desde variable de entorno
-cred_json = os.environ.get("CREDENCIALES_JSON")
+# GitHub Actions: leer credenciales desde variable de entorno
+cred_json = os.environ.get("CREDENCIALES_JSON")  # El nombre de tu variable en GitHub
+if cred_json is None:
+    raise ValueError("No se encontró la variable de entorno CREDENCIALES_JSON")
+
 credenciales_dict = json.loads(cred_json)
 credenciales = Credentials.from_service_account_info(credenciales_dict, scopes=scopes)
 
