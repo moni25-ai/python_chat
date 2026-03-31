@@ -3,13 +3,11 @@ name: Leer WhatsApp
 on:
   schedule:
     - cron: '0 0 */5 * *'  # Cada 5 días a la medianoche
-  workflow_dispatch:  # Permite ejecutar manualmente si querés
+  workflow_dispatch:  # Permite ejecutar manualmente
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
-    env:
-      CREDENCIALES_JSON: ${{ secrets.CREDENCIALES_JSON }}  # Aquí usamos el secreto que creaste
 
     steps:
       - name: Chequear repositorio
@@ -23,6 +21,9 @@ jobs:
       - name: Instalar dependencias
         run: |
           pip install gspread google-auth
+
+      - name: Crear archivo credenciales.json desde secret
+        run: echo "${{ secrets.CREDENCIALES_JSON }}" > ./credenciales.json
 
       - name: Ejecutar leer_whatsapp.py
         run: python leer_whatsapp.py
