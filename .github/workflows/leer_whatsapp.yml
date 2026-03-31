@@ -22,8 +22,7 @@ jobs:
         run: |
           pip install gspread google-auth
 
-      - name: Crear archivo credenciales.json desde secret
-        run: echo "${{ secrets.CREDENCIALES_JSON }}" > ./credenciales.json
-
       - name: Ejecutar leer_whatsapp.py
         run: python leer_whatsapp.py
+        env:
+          CREDENCIALES_JSON: ${{ secrets.CREDENCIALES_JSON }}
