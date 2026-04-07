@@ -2,7 +2,7 @@ name: Leer WhatsApp
 
 on:
   schedule:
-    - cron: '0 0 */5 * *'  # Cada 5 días a la medianoche
+    - cron: '0 0 */10 * *'  # Cada 10 días a la medianoche
   workflow_dispatch:  # Permite ejecutar manualmente
 
 jobs:
